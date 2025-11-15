@@ -1,43 +1,43 @@
 import json
 import random
 import pickle
-import sys
 import os
+import wikipedia
 
-# Add the parent directory to the Python path to find 'wikipedia_api'
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from wikipedia_api import get_wikipedia_summary # Using your more robust API script
-
-# Get the directory of the current script to build correct file paths
+# Get the directory of the current script
 script_dir = os.path.dirname(os.path.abspath(__file__))
 
-# --- Define file paths ---
+# File paths
 MODEL_PATH = os.path.join(script_dir, "model.pkl")
 VECTORIZER_PATH = os.path.join(script_dir, "vectorizer.pkl")
 INTENTS_PATH = os.path.join(script_dir, "intents.json")
 
-# --- Check if model files exist before loading ---
+# --- Load model & vectorizer ---
 if not os.path.exists(MODEL_PATH) or not os.path.exists(VECTORIZER_PATH):
-    print("❌ Error: Model files not found.")
-    print(f"Please run 'train.py' in the '{os.path.basename(script_dir)}' directory first to generate 'model.pkl' and 'vectorizer.pkl'.")
-    sys.exit(1)
+    raise FileNotFoundError("Model files not found. Run 'train.py' first.")
 
-# Load model + vectorizer
-model = pickle.load(open(MODEL_PATH, "rb"))
-vectorizer = pickle.load(open(VECTORIZER_PATH, "rb"))
+with open(MODEL_PATH, "rb") as f:
+    model = pickle.load(f)
 
-# Load intents
+with open(VECTORIZER_PATH, "rb") as f:
+    vectorizer = pickle.load(f)
+
+# --- Load intents ---
 with open(INTENTS_PATH, "r", encoding="utf-8") as f:
     intents = json.load(f)
 
+
 def get_intent_response(user_msg):
-    """
-    Returns a response and confidence score from intents.json if matched.
-    """
+    """Return predicted response and confidence from intents.json"""
     X = vectorizer.transform([user_msg])
+    decision_scores = model.decision_function(X)
     
-    # Get confidence score and predicted tag
-    confidence = model.decision_function(X).max()
+    # Handle multiclass shape
+    if len(decision_scores.shape) == 1:
+        confidence = max(decision_scores)
+    else:
+        confidence = max(decision_scores[0])
+    
     tag = model.predict(X)[0]
 
     for intent in intents["intents"]:
@@ -49,21 +49,20 @@ def get_intent_response(user_msg):
 
 
 def get_response(user_msg):
-    # A confidence threshold for the intent model. Adjust if needed.
-    CONFIDENCE_THRESHOLD = 0.5 
+    """Main response function with fallback to Wikipedia"""
+    CONFIDENCE_THRESHOLD = 0.5
 
-    # Step 1: Try intents.json
+    # 1. Try intent-based response
     intent_response, confidence = get_intent_response(user_msg)
-
-    # Step 2: If confidence is high, use the intent response
     if intent_response and confidence > CONFIDENCE_THRESHOLD:
         return intent_response
 
-    # Step 3: If confidence is low, try Wikipedia as a fallback
-    if intent_response is None or confidence <= CONFIDENCE_THRESHOLD:
-        wiki_answer = get_wikipedia_summary(user_msg)
-        if wiki_answer:
-            return wiki_answer
+    # 2. Wikipedia fallback
+    try:
+        wiki_summary = wikipedia.summary(user_msg, sentences=2)
+        return wiki_summary
+    except Exception:
+        pass
 
-    # Step 4: If Wikipedia also fails, use the low-confidence intent response or a final fallback message
+    # 3. Final fallback
     return intent_response or "I'm not sure about that, but I can learn if you teach me!"
