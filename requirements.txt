@@ -3,6 +3,7 @@ gunicorn
 wikipedia
 scikit-learn==1.6.1
 numpy==2.0.2
-scipy==1.12.0
+scipy
+
 
 
