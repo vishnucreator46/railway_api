@@ -1,5 +1,6 @@
 from flask import Flask, request
 from chatbot import get_response
+import os
 
 app = Flask(__name__)
 
@@ -11,7 +12,6 @@ def home():
 def chat():
     data = request.get_json()
 
-    # Validate request
     if not data or "message" not in data:
         return {"error": "No message provided"}, 400
 
@@ -27,4 +27,5 @@ def chat():
         return {"error": "Internal server error"}, 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Railway dynamic port
+    app.run(host="0.0.0.0", port=port)
